@@ -40,7 +40,11 @@ class WeatherAgent:
         await self.client.__aenter__()
 
         # Create the agent with the tools
-        llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0)
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0,
+            max_tokens=10000,  # Limit response to 10,000 tokens
+        )
         self.agent = create_react_agent(llm, self.client.get_tools())
 
     async def query(self, question: str) -> str:
