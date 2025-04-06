@@ -1,9 +1,10 @@
 import argparse
+import asyncio
 
 from .agent import WeatherAgent
 
 
-def main():
+async def main_async():
     parser = argparse.ArgumentParser(description="Weather Agent CLI")
     parser.add_argument(
         "--server",
@@ -14,6 +15,8 @@ def main():
 
     print("Initializing Weather Agent...")
     agent = WeatherAgent(args.server)
+    await agent.initialize()
+
     print("\nWeather Agent is ready! Type 'quit' to exit.")
     print("Example questions:")
     print("- What are the current weather alerts in California?")
@@ -21,20 +24,25 @@ def main():
     print("- Are there any weather alerts in New York?")
     print()
 
-    while True:
-        try:
+    try:
+        while True:
             question = input("Question: ").strip()
             if question.lower() == "quit":
                 break
             if not question:
                 continue
 
-            response = agent.query(question)
+            response = await agent.query(question)
             print("\nResponse:", response, "\n")
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print(f"\nError: {str(e)}\n")
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    finally:
+        await agent.close()
+
+
+def main():
+    """Entry point for the CLI."""
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":

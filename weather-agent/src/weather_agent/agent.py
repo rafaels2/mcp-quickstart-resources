@@ -1,9 +1,10 @@
+import os
+
 from dotenv import load_dotenv
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AIMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
-from mcp.adapters.langchain import MCPToolAdapter
-from mcp.client import MCPClient
+from langgraph.prebuilt import create_react_agent
 
 # Load environment variables
 load_dotenv()
@@ -12,35 +13,50 @@ load_dotenv()
 class WeatherAgent:
     def __init__(self, server_path: str):
         """Initialize the Weather Agent with the path to the weather server."""
-        self.client = MCPClient(server_path)
-        self.tools = MCPToolAdapter(self.client).get_tools()
-        self.agent = self._create_agent()
+        self.server_path = os.path.abspath(server_path)
+        self.client = None
+        self.agent = None
 
-    def _create_agent(self) -> AgentExecutor:
-        """Create the LangChain agent with OpenAI functions."""
+    async def initialize(self):
+        """Initialize the MCP client and create the agent."""
+        server_config = {
+            "weather": {
+                "command": "python",
+                "args": [self.server_path],
+                "transport": "stdio",
+            }
+        }
+
+        self.client = MultiServerMCPClient(server_config)
+        await self.client.__aenter__()
+
+        # Create the agent with the tools
         llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0)
+        self.agent = create_react_agent(llm, self.client.get_tools())
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    """You are a helpful weather assistant that can provide weather information using the available tools.
-            When asked about weather:
-            1. For state-wide alerts, use the get_alerts tool with the state code
-            2. For location-specific forecasts, use the get_forecast tool with latitude,longitude
-            3. Always provide clear, concise responses
-            4. If you need coordinates for a city, use your knowledge to provide them
-            """,
-                ),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
-        )
-
-        agent = create_openai_functions_agent(llm, self.tools, prompt)
-        return AgentExecutor(agent=agent, tools=self.tools, verbose=True)
-
-    def query(self, question: str) -> str:
+    async def query(self, question: str) -> str:
         """Query the weather agent with a natural language question."""
-        return self.agent.invoke({"input": question})["output"]
+        if not self.agent:
+            await self.initialize()
+
+        try:
+            response = await self.agent.ainvoke(
+                {"messages": [{"role": "user", "content": question}]}
+            )
+
+            # Handle different response types
+            if isinstance(response, AIMessage):
+                return response.content
+            elif isinstance(response, dict):
+                if "messages" in response:
+                    return response["messages"][-1].content
+                elif "output" in response:
+                    return response["output"]
+            return str(response)
+        except Exception as e:
+            return f"Error processing query: {str(e)}"
+
+    async def close(self):
+        """Close the MCP client connection."""
+        if self.client:
+            await self.client.__aexit__(None, None, None)
