@@ -6,6 +6,13 @@
             "args": [
                 "../weather-server-python/weather.py"
             ]
+        },
+        "github": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-github"
+            ],
         }
     }
 }

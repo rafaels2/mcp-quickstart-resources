@@ -24,7 +24,16 @@ class WeatherAgent:
                 "command": "python",
                 "args": [self.server_path],
                 "transport": "stdio",
-            }
+            },
+            "github": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-github"],
+                "env": {
+                    "GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv(
+                        "GITHUB_PERSONAL_ACCESS_TOKEN"
+                    )
+                },
+            },
         }
 
         self.client = MultiServerMCPClient(server_config)
